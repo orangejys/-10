@@ -291,3 +291,338 @@ m² = 2n² ⇒ m² чётно ⇒ m чётно ⇒ m = 2k
         """)
     ]
     
+ # Добавляем материалы для Методов решения
+    methods_materials = [
+        (5, "Неопределённые коэффициенты", """
+🧮 МЕТОД НЕОПРЕДЕЛЁННЫХ КОЭФФИЦИЕНТОВ
+
+Применяется для разложения рациональных дробей:
+
+P(x)/Q(x) = A₁/(x-a₁) + A₂/(x-a₂) + ... + Aₖ/(x-aₖ)
+
+Пример:
+(3x+1)/((x-1)(x+2)) = A/(x-1) + B/(x+2)
+
+Умножаем на знаменатель:
+3x + 1 = A(x+2) + B(x-1)
+
+Решаем систему:
+{ A + B = 3
+{ 2A - B = 1
+
+Решение: A = 4/3, B = 5/3
+        """),
+        
+        (5, "Метод математической индукции", """
+🌀 МЕТОД МАТЕМАТИЧЕСКОЙ ИНДУКЦИИ
+
+Шаги доказательства:
+1. База индукции: проверяем утверждение для n=1
+2. Индукционный переход: 
+   Предполагаем верным для n=k
+   Доказываем для n=k+1
+
+Пример: 1 + 2 + ... + n = n(n+1)/2
+
+База: n=1: 1 = 1·2/2 ✓
+Переход: 
+1+...+k+(k+1) = k(k+1)/2 + (k+1) = (k+1)(k/2+1) = (k+1)(k+2)/2
+        """),
+        
+        (5, "Зажатие (теорема о двух милиционерах)", """
+🎯 ТЕОРЕМА О ЗАЖАТОЙ ПОСЛЕДОВАТЕЛЬНОСТИ
+
+Если:
+1. lim xₙ = lim yₙ = a
+2. ∃N: ∀n≥N xₙ ≤ zₙ ≤ yₙ
+Тогда: lim zₙ = a
+
+Пример:
+lim (sin n)/n = 0, т.к.
+-1/n ≤ (sin n)/n ≤ 1/n
+и lim ±1/n = 0
+        """),
+        
+        (5, "Критерий Коши", """
+📏 КРИТЕРИЙ КОШИ СХОДИМОСТИ
+
+Последовательность {xₙ} сходится тогда и только тогда, когда:
+∀ε>0 ∃N∈ℕ ∀m,n≥N: |xₘ - xₙ| < ε
+
+Геометрический смысл:
+Члены последовательности становятся сколь угодно близкими друг к другу.
+
+Применение:
+Позволяет доказывать сходимость, не зная предела.
+        """)
+    ]
+    
+    # Объединяем все материалы
+    all_materials = (axioms_materials + supremum_materials + 
+                    limits_materials + proofs_materials + methods_materials)
+    
+    cursor.executemany(
+        "INSERT INTO materials (section_id, title, content) VALUES (?, ?, ?)", 
+        all_materials
+    )
+    
+    # Добавляем цитаты
+    quotes = [
+        ("Платон", "Математика — это занятие для души"),
+        ("Аристотель", "Математика выявляет порядок, симметрию и определённость"),
+        ("Пифагор", "Всё есть число"),
+        ("Евклид", "В математике нет царской дороги"),
+        ("Архимед", "Дайте мне точку опоры, и я переверну мир"),
+        ("Платон", "Бог вечно геометризует"),
+        ("Пифагор", "Начало есть половина целого"),
+        ("Аристотель", "Природа боится пустоты"),
+        ("Евклид", "Что и требовалось доказать"),
+        ("Архимед", "Эврика!")
+    ]
+    cursor.executemany(
+        "INSERT INTO quotes (author, quote_text) VALUES (?, ?)", 
+        quotes
+    )
+
+# Функции для работы с базой данных
+def get_sections():
+    conn = sqlite3.connect('math_bot.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, description FROM sections ORDER BY id")
+    sections = cursor.fetchall()
+    conn.close()
+    return sections
+
+def get_section_materials(section_id):
+    conn = sqlite3.connect('math_bot.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, title, content FROM materials WHERE section_id = ?", (section_id,))
+    materials = cursor.fetchall()
+    conn.close()
+    return materials
+
+def get_random_quote():
+    conn = sqlite3.connect('math_bot.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT author, quote_text FROM quotes ORDER BY RANDOM() LIMIT 1")
+    quote = cursor.fetchone()
+    conn.close()
+    return quote
+
+def search_materials(query):
+    conn = sqlite3.connect('math_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT m.id, m.title, m.content, s.name 
+        FROM materials m 
+        JOIN sections s ON m.section_id = s.id 
+        WHERE m.title LIKE ? OR m.content LIKE ?
+    ''', (f'%{query}%', f'%{query}%'))
+    results = cursor.fetchall()
+    conn.close()
+    return results
+
+# Команды бота
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("📐 Аксиомы", callback_data="section_1")],
+        [InlineKeyboardButton("📊 Супремум и инфимум", callback_data="section_2")],
+        [InlineKeyboardButton("🎯 Предел последовательности", callback_data="section_3")],
+        [InlineKeyboardButton("🔍 Доказательства", callback_data="section_4")],
+        [InlineKeyboardButton("🛠️ Методы решения", callback_data="section_5")],
+        [InlineKeyboardButton("💬 Случайная цитата", callback_data="random_quote")],
+        [InlineKeyboardButton("🔍 Поиск", callback_data="search")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "📚 *Добро пожаловать в бот по математическому анализу!*\n\n"
+        "Выберите раздел:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_text = """
+📖 *Доступные команды:*
+
+/start - начать работу
+/help - помощь  
+/quote - случайная цитата
+/search - поиск по материалам
+
+*Или используйте кнопки меню!*
+
+🎯 *Разделы:*
+• Аксиомы вещественных чисел
+• Супремум и инфимум  
+• Предел последовательности
+• Доказательства
+• Методы решения задач
+    """
+    await update.message.reply_text(help_text, parse_mode='Markdown')
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    
+    if data == "random_quote":
+        await show_random_quote(query)
+    elif data == "search":
+        await query.edit_message_text("🔍 *Поиск по материалам*\n\nВведите: /search <запрос>\n\nНапример: /search предел", parse_mode='Markdown')
+    elif data == "main_menu":
+        await show_main_menu(query)
+    elif data.startswith("section_"):
+        section_id = int(data.split("_")[1])
+        await show_section_materials(query, section_id)
+    elif data.startswith("material_"):
+        material_id = int(data.split("_")[1])
+        await show_material(query, material_id)
+
+async def show_main_menu(query):
+    keyboard = [
+        [InlineKeyboardButton("📐 Аксиомы", callback_data="section_1")],
+        [InlineKeyboardButton("📊 Супремум и инфимум", callback_data="section_2")],
+        [InlineKeyboardButton("🎯 Предел последовательности", callback_data="section_3")],
+        [InlineKeyboardButton("🔍 Доказательства", callback_data="section_4")],
+        [InlineKeyboardButton("🛠️ Методы решения", callback_data="section_5")],
+        [InlineKeyboardButton("💬 Случайная цитата", callback_data="random_quote")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        "📚 *Выберите раздел:*",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+async def show_section_materials(query, section_id):
+    sections = get_sections()
+    section_name = next((name for id, name, desc in sections if id == section_id), "Раздел")
+    materials = get_section_materials(section_id)
+    
+    if not materials:
+        await query.edit_message_text(f"В разделе '{section_name}' пока нет материалов")
+        return
+    
+    keyboard = []
+    for material_id, title, content in materials:
+        keyboard.append([InlineKeyboardButton(f"📄 {title}", callback_data=f"material_{material_id}")])
+    
+    keyboard.append([InlineKeyboardButton("🔙 Главное меню", callback_data="main_menu")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        f"📚 *{section_name}:*\n\nВыберите тему:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+async def show_material(query, material_id):
+    conn = sqlite3.connect('math_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT m.title, m.content, s.name 
+        FROM materials m 
+        JOIN sections s ON m.section_id = s.id 
+        WHERE m.id = ?
+    ''', (material_id,))
+    title, content, section_name = cursor.fetchone()
+    conn.close()
+    
+    keyboard = [
+        [InlineKeyboardButton("🔙 Назад к разделу", callback_data=f"section_{next((id for id,name,desc in get_sections() if name==section_name), 1)}")],
+        [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # Разбиваем длинные сообщения
+    if len(content) > 4000:
+        parts = [content[i:i+4000] for i in range(0, len(content), 4000)]
+        await query.edit_message_text(
+            f"**{title}**\n\n{parts[0]}",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        for part in parts[1:]:
+            await query.message.reply_text(part, parse_mode='Markdown')
+    else:
+        await query.edit_message_text(
+            f"**{title}**\n\n{content}",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+
+async def show_random_quote(query):
+    author, quote_text = get_random_quote()
+    
+    keyboard = [[InlineKeyboardButton("🔙 Главное меню", callback_data="main_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        f"_{quote_text}_\n\n— *{author}*",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text(
+            "🔍 *Поиск по материалам*\n\n"
+            "Использование: `/search <запрос>`\n\n"
+            "Примеры:\n"
+            "• `/search предел`\n"
+            "• `/search аксиома`\n"
+            "• `/search доказательство`",
+            parse_mode='Markdown'
+        )
+        return
+    
+    query = " ".join(context.args)
+    results = search_materials(query)
+    
+    if not results:
+        await update.message.reply_text(f"🔍 По запросу '*{query}*' ничего не найдено", parse_mode='Markdown')
+        return
+    
+    text = f"🔍 *Результаты поиска по запросу '{query}':*\n\n"
+    for i, (material_id, title, content, section_name) in enumerate(results[:5], 1):
+        # Создаем превью содержимого
+        preview = content.replace('\n', ' ')[:100] + "..." if len(content) > 100 else content
+        text += f"{i}. **{title}** (*{section_name}*)\n{preview}\n\n"
+    
+    if len(results) > 5:
+        text += f"*... и ещё {len(results) - 5} результатов*"
+    
+    await update.message.reply_text(text, parse_mode='Markdown')
+
+async def quote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    author, quote_text = get_random_quote()
+    await update.message.reply_text(
+        f"_{quote_text}_\n\n— *{author}*",
+        parse_mode='Markdown'
+    )
+
+def main():
+    # Инициализируем базу данных
+    init_database()
+    
+    # Создаем приложение
+    application = Application.builder().token("8373835216:AAF8m-ktBUj36hfgGm9x4pFwHPw_T2zfzck").build()
+    
+    # Добавляем обработчики
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("search", search_command))
+    application.add_handler(CommandHandler("quote", quote_command))
+    
+    application.add_handler(CallbackQueryHandler(button_handler))
+    
+    # Запускаем бота
+    logger.info("Бот запущен...")
+    application.run_polling()
+
+if __name__ == "__main__":
+    main()
