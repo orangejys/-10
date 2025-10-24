@@ -2,8 +2,19 @@ import logging
 import sqlite3
 import random
 import html
+import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+
+def neutralize_slashes_for_telegram(text_html_escaped: str) -> str:
+    """
+    Заменяет обычный '/' на символ деления '∕' (U+2215), если сразу
+    после слэша идёт буква или цифра. Так '/2', '/n', '/k' и т.п.
+    перестают считаться командами Telegram.
+    Работает по уже экранированному HTML-тексту.
+    """
+    # Меняем только шаблон "слэш + буква/цифра", чтобы ссылки с протоколом и прочие случаи не трогать
+    return re.sub(r'/(?=[0-9A-Za-zА-Яа-я])', '∕', text_html_escaped)
 
 # Настройка логирования
 logging.basicConfig(
@@ -547,24 +558,31 @@ async def show_material(query, material_id):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Экраннирование для HTML
+    # 1) Экранируем HTML
     safe_title = html.escape(title)
     safe_content = html.escape(content)
 
-    # Разбиваем длинные тексты
+    # 2) Убираем автодетект команд Telegram ("/2", "/n", "/k" и т.п.)
+    safe_content = neutralize_slashes_for_telegram(safe_content)
+
     header = f"<b>{safe_title}</b>\n\n"
-    max_len = 4096  # лимит Telegram
+    max_len = 4096
     first_chunk_space = max_len - len(header)
 
+    # Отправка с parse_mode='HTML'
     if len(safe_content) > first_chunk_space:
-        parts = [safe_content[i:i+max_len] for i in range(0, len(safe_content), max_len)]
+        # Первая часть с заголовком
         await query.edit_message_text(
-            header + parts[0],
+            header + safe_content[:first_chunk_space],
             reply_markup=reply_markup,
             parse_mode='HTML'
         )
-        for part in parts[1:]:
-            await query.message.reply_text(part, parse_mode='HTML')
+        # Остальные части
+        for i in range(first_chunk_space, len(safe_content), max_len):
+            await query.message.reply_text(
+                safe_content[i:i+max_len],
+                parse_mode='HTML'
+            )
     else:
         await query.edit_message_text(
             header + safe_content,
