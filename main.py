@@ -1,6 +1,7 @@
 import logging
 import sqlite3
 import random
+import html
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
@@ -529,30 +530,46 @@ async def show_material(query, material_id):
         JOIN sections s ON m.section_id = s.id 
         WHERE m.id = ?
     ''', (material_id,))
-    title, content, section_name = cursor.fetchone()
+    row = cursor.fetchone()
     conn.close()
-    
+
+    if not row:
+        await query.answer("Материал не найден", show_alert=True)
+        return
+
+    title, content, section_name = row
+
+    # Кнопки «назад»
+    section_id_for_back = next((sid for sid, name, _ in get_sections() if name == section_name), 1)
     keyboard = [
-        [InlineKeyboardButton("🔙 Назад к разделу", callback_data=f"section_{next((id for id,name,desc in get_sections() if name==section_name), 1)}")],
+        [InlineKeyboardButton("🔙 Назад к разделу", callback_data=f"section_{section_id_for_back}")],
         [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    # Разбиваем длинные сообщения
-    if len(content) > 4000:
-        parts = [content[i:i+4000] for i in range(0, len(content), 4000)]
+
+    # Экраннирование для HTML
+    safe_title = html.escape(title)
+    safe_content = html.escape(content)
+
+    # Разбиваем длинные тексты
+    header = f"<b>{safe_title}</b>\n\n"
+    max_len = 4096  # лимит Telegram
+    first_chunk_space = max_len - len(header)
+
+    if len(safe_content) > first_chunk_space:
+        parts = [safe_content[i:i+max_len] for i in range(0, len(safe_content), max_len)]
         await query.edit_message_text(
-            f"**{title}**\n\n{parts[0]}",
+            header + parts[0],
             reply_markup=reply_markup,
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         for part in parts[1:]:
-            await query.message.reply_text(part, parse_mode='Markdown')
+            await query.message.reply_text(part, parse_mode='HTML')
     else:
         await query.edit_message_text(
-            f"**{title}**\n\n{content}",
+            header + safe_content,
             reply_markup=reply_markup,
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
 
 async def show_random_quote(query):
